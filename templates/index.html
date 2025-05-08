@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>旅遊小幫手 | Smart Travel Helper</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* 新增一周天氣預報相關樣式 */
+        .weather-toggle {
+            display: flex;
+            justify-content: center;
+            margin: 10px 0;
+        }
+        
+        .weather-toggle button {
+            padding: 8px 15px;
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0 5px;
+            transition: all 0.3s;
+        }
+        
+        .weather-toggle button.active {
+            background-color: #4b8bf4;
+            color: white;
+            border-color: #4b8bf4;
+        }
+        
+        .forecast-container {
+            display: flex;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            padding: 10px 0;
+            scrollbar-width: thin;
+            scrollbar-color: #4b8bf4 #f0f0f0;
+        }
+        
+        .forecast-day {
+            min-width: 120px;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            margin-right: 10px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .forecast-date {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+        
+        .forecast-icon {
+            font-size: 2em;
+            margin: 10px 0;
+            color: #4b8bf4;
+        }
+        
+        .forecast-temp {
+            display: flex;
+            justify-content: center;
+            margin: 5px 0;
+        }
+        
+        .forecast-max {
+            color: #e74c3c;
+            margin-right: 8px;
+        }
+        
+        .forecast-min {
+            color: #3498db;
+        }
+        
+        .forecast-condition {
+            font-size: 0.9em;
+            margin: 5px 0;
+        }
+        
+        .forecast-rain {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85em;
+            color: #666;
+        }
+        
+        .forecast-rain i {
+            color: #3498db;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-globe"></i>
+                <h1>旅遊小幫手</h1>
+            </div>
+            <p class="subtitle">您的旅行隨身助理</p>
+        </header>
+
+        <!-- 國家和城市選擇器 -->
+        <div class="selector-container">
+            <div class="selector-card">
+                <div class="input-group">
+                    <label for="country-select">國家</label>
+                    <select id="country-select" class="select-control">
+                        {% for country in countries %}
+                            <option value="{{ country }}">{{ country }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="input-group">
+                    <label for="city-select">城市</label>
+                    <select id="city-select" class="select-control">
+                        <!-- 自動生成城市選項 -->
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- 功能選項卡 -->
+        <div class="tabs">
+            <button class="tab-button active" data-tab="exchange">
+                <i class="fas fa-money-bill-wave"></i> 匯率查詢
+            </button>
+            <button class="tab-button" data-tab="weather">
+                <i class="fas fa-cloud-sun"></i> 天氣查詢
+            </button>
+            <button class="tab-button" data-tab="info">
+                <i class="fas fa-info-circle"></i> 小知識
+            </button>
+        </div>
+
+        <!-- 內容區域 -->
+        <div class="tab-content">
+            <!-- 匯率查詢 -->
+            <div id="exchange" class="tab-pane active">
+                <h2><i class="fas fa-money-bill-wave"></i> 匯率轉換</h2>
+                
+                <div class="exchange-card">
+                    <div class="input-group">
+                        <label for="amount-input">金額</label>
+                        <input type="number" id="amount-input" class="input-control" value="1000" min="0">
+                    </div>
+                    
+                    <div class="currency-converter">
+                        <div class="currency-box">
+                            <span>從</span>
+                            <div class="currency" id="from-currency">TWD</div>
+                        </div>
+                        
+                        <button id="switch-currency" class="switch-button">
+                            <i class="fas fa-exchange-alt"></i>
+                        </button>
+                        
+                        <div class="currency-box">
+                            <span>到</span>
+                            <div class="currency" id="to-currency">JPY</div>
+                        </div>
+                    </div>
+                    
+                    <div class="result-container">
+                        <p class="result-label">轉換結果</p>
+                        <p class="result-value" id="conversion-result">計算中...</p>
+                    </div>
+                    
+                    <div class="rate-info" id="rate-info">
+                        <i class="fas fa-dollar-sign"></i> 匯率: <span id="current-rate">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 天氣查詢 -->
+            <div id="weather" class="tab-pane">
+                <h2><i class="fas fa-cloud-sun"></i> 天氣資訊</h2>
+                
+                <!-- 天氣模式切換 -->
+                <div class="weather-toggle">
+                    <button id="current-weather-toggle" class="active">當前天氣</button>
+                    <button id="weekly-weather-toggle">一周預報</button>
+                </div>
+                
+                <!-- 當前天氣 -->
+                <div id="current-weather-section" class="weather-card">
+                    <div class="location-info">
+                        <h3 id="weather-city">Tokyo</h3>
+                        <p id="weather-country">Japan</p>
+                    </div>
+                    
+                    <div id="weather-loading" class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                    
+                    <div id="weather-content" class="weather-content" style="display:none;">
+                        <div class="weather-info">
+                            <div class="weather-icon">
+                                <i id="weather-icon" class="fas fa-sun"></i>
+                                <p id="weather-condition">晴天</p>
+                            </div>
+                            
+                            <div class="temperature">
+                                <div id="weather-temp">--°C</div>
+                                <button id="refresh-weather" class="refresh-button">
+                                    <i class="fas fa-sync-alt"></i> 刷新
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button id="get-weather" class="action-button">
+                        <i class="fas fa-search"></i> 查詢天氣
+                    </button>
+                </div>
+                
+                <!-- 一周天氣預報 -->
+                <div id="weekly-weather-section" class="weather-card" style="display:none;">
+                    <div class="location-info">
+                        <h3 id="weekly-weather-city">Tokyo</h3>
+                        <p id="weekly-weather-country">Japan</p>
+                    </div>
+                    
+                    <div id="weekly-weather-loading" class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                    
+                    <div id="weekly-forecast-container" class="forecast-container" style="display:none;">
+                        <!-- 預報項目會在此動態生成 -->
+                    </div>
+                    
+                    <button id="get-weekly-weather" class="action-button">
+                        <i class="fas fa-search"></i> 查詢一周天氣
+                    </button>
+                </div>
+            </div>
+
+            <!-- 旅遊小知識 -->
+            <div id="info" class="tab-pane">
+                <h2><i class="fas fa-info-circle"></i> 旅遊資訊</h2>
+                
+                <div class="info-card">
+                    <div class="country-title">
+                        <h3 id="info-country">Japan</h3>
+                    </div>
+                    
+                    <div class="travel-info">
+                        <h3>旅遊小知識</h3>
+                        
+                        <div class="info-item">
+                            <span class="info-label">語言</span>
+                            <span id="info-language" class="info-value">日語</span>
+                        </div>
+                        
+                        <div class="info-item">
+                            <span class="info-label">時區</span>
+                            <span id="info-timezone" class="info-value">UTC+9</span>
+                        </div>
+                        
+                        <div class="info-item">
+                            <span class="info-label">插頭類型</span>
+                            <span id="info-plug" class="info-value">A型、B型 (兩扁插頭)</span>
+                        </div>
+                        
+                        <div class="info-item">
+                            <span class="info-label">電壓</span>
+                            <span id="info-voltage" class="info-value">100V</span>
+                        </div>
+                        
+                        <div class="info-item">
+                            <span class="info-label">緊急電話</span>
+                            <span id="info-emergency" class="info-value">110 (警察) / 119 (救護/消防)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>© 2025 旅遊小幫手 | Smart Travel Helper</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 全域變數
+            let selectedCountry = document.getElementById('country-select').value;
+            let selectedCity = '';
+            
+            // Tab 切換功能
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabPanes = document.querySelectorAll('.tab-pane');
+            
+            tabButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const tabId = this.getAttribute('data-tab');
+                    
+                    // 移除所有活動狀態
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    tabPanes.forEach(pane => pane.classList.remove('active'));
+                    
+                    // 設置當前 tab 為活動狀態
+                    this.classList.add('active');
+                    document.getElementById(tabId).classList.add('active');
+                    
+                    // 根據切換的 tab 加載相關數據
+                    if (tabId === 'exchange') {
+                        fetchExchangeRate();
+                    } else if (tabId === 'weather') {
+                        updateWeatherLocation();
+                    } else if (tabId === 'info') {
+                        updateCountryInfo();
+                    }
+                });
+            });
+            
+            // 初始化城市選擇器
+            function initializeCitySelector() {
+                fetch(`/api/cities?country=${selectedCountry}`)
+                    .then(response => response.json())
+                    .then(cities => {
+                        const citySelect = document.getElementById('city-select');
+                        citySelect.innerHTML = ''; // 清空現有選項
+                        
+                        cities.forEach(city => {
+                            const option = document.createElement('option');
+                            option.value = city;
+                            option.textContent = city;
+                            citySelect.appendChild(option);
+                        });
+                        
+                        selectedCity = cities[0];
+                        updateWeatherLocation();
+                        fetchExchangeRate();
+                    })
+                    .catch(error => console.error('獲取城市列表失敗:', error));
+            }
+            
+            // 國家選擇變更事件
+            document.getElementById('country-select').addEventListener('change', function() {
+                selectedCountry = this.value;
+                initializeCitySelector();
+                updateCurrencyDisplay();
+                updateWeatherLocation();
+                updateCountryInfo();
+            });
+            
+            // 城市選擇變更事件
+            document.getElementById('city-select').addEventListener('change', function() {
+                selectedCity = this.value;
+                updateWeatherLocation();
+            });
+            
+            // 更新匯率顯示
+            function updateCurrencyDisplay() {
+                fetch(`/api/exchange_rate?country=${selectedCountry}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            throw new Error(data.error);
+                        }
+                        
+                        // 更新貨幣顯示
+                        if (document.getElementById('from-currency').textContent === 'TWD') {
+                            document.getElementById('to-currency').textContent = data.target;
+                        } else {
+                            document.getElementById('from-currency').textContent = data.target;
+                            document.getElementById('to-currency').textContent = 'TWD';
+                        }
+                        
+                        // 更新匯率信息
+                        document.getElementById('current-rate').textContent = `1 TWD = ${data.rate.toFixed(4)} ${data.target}`;
+                        
+                        // 更新轉換結果
+                        convertCurrency();
+                    })
+                    .catch(error => {
+                        console.error('更新匯率顯示失敗:', error);
+                        document.getElementById('current-rate').textContent = '無法獲取匯率';
+                    });
+            }
+            
+            // 匯率轉換
+            function convertCurrency() {
+                const amount = parseFloat(document.getElementById('amount-input').value) || 0;
+                const fromCurrency = document.getElementById('from-currency').textContent;
+                
+                fetch(`/api/convert_currency?country=${selectedCountry}&amount=${amount}&from=${fromCurrency}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            throw new Error(data.error);
+                        }
+                        
+                        document.getElementById('conversion-result').textContent = 
+                            `${data.converted_amount.toFixed(2)} ${data.to}`;
+                    })
+                    .catch(error => {
+                        console.error('轉換貨幣失敗:', error);
+                        document.getElementById('conversion-result').textContent = '轉換失敗';
+                    });
+            }
+            
+            // 金額變更時轉換貨幣
+            document.getElementById('amount-input').addEventListener('input', convertCurrency);
+            
+            // 切換貨幣方向
+            document.getElementById('switch-currency').addEventListener('click', function() {
+                const fromElement = document.getElementById('from-currency');
+                const toElement = document.getElementById('to-currency');
+                
+                // 交換貨幣顯示
+                const temp = fromElement.textContent;
+                fromElement.textContent = toElement.textContent;
+                toElement.textContent = temp;
+                
+                // 重新計算貨幣
+                convertCurrency();
+            });
+            
+            // 更新天氣位置顯示
+            function updateWeatherLocation() {
+                document.getElementById('weather-city').textContent = selectedCity;
+                document.getElementById('weather-country').textContent = selectedCountry;
+                document.getElementById('weekly-weather-city').textContent = selectedCity;
+                document.getElementById('weekly-weather-country').textContent = selectedCountry;
+            }
+            
+            // 獲取當前天氣數據
+            function fetchWeather() {
+                // 顯示載入狀態
+                document.getElementById('weather-loading').style.display = 'flex';
+                document.getElementById('weather-content').style.display = 'none';
+                
+                fetch(`/api/weather?country=${selectedCountry}&city=${selectedCity}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            throw new Error(data.error);
+                        }
+                        
+                        // 更新天氣顯示
+                        document.getElementById('weather-temp').textContent = `${data.temperature}°C`;
+                        document.getElementById('weather-condition').textContent = data.weather;
+                        
+                        // 更新天氣圖標
+                        const weatherIcon = document.getElementById('weather-icon');
+                        weatherIcon.className = getWeatherIconClass(data.weather_code);
+                        
+                        // 隱藏載入狀態，顯示內容
+                        document.getElementById('weather-loading').style.display = 'none';
+                        document.getElementById('weather-content').style.display = 'flex';
+                    })
+                    .catch(error => {
+                        console.error('獲取天氣資料失敗:', error);
+                        document.getElementById('weather-temp').textContent = '獲取失敗';
+                        document.getElementById('weather-condition').textContent = '';
+                        
+                        // 顯示內容但使用錯誤圖標
+                        document.getElementById('weather-icon').className = 'fas fa-exclamation-triangle';
+                        document.getElementById('weather-loading').style.display = 'none';
+                        document.getElementById('weather-content').style.display = 'flex';
+                    });
+            }
+            
+            // 獲取一周天氣預報數據
+            function fetchWeeklyWeather() {
+                // 顯示載入狀態
+                document.getElementById('weekly-weather-loading').style.display = 'flex';
+                document.getElementById('weekly-forecast-container').style.display = 'none';
+                
+                fetch(`/api/weather/weekly?country=${selectedCountry}&city=${selectedCity}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            throw new Error(data.error);
+                        }
+                        
+                        // 清空現有預報
+                        const forecastContainer = document.getElementById('weekly-forecast-container');
+                        forecastContainer.innerHTML = '';
+                        
+                        // 添加每天的預報
+                        data.forecast.forEach(day => {
+                            const date = new Date(day.date);
+                            const dateOptions = { weekday: 'short', month: 'short', day: 'numeric' };
+                            const formattedDate = date.toLocaleDateString('zh-TW', dateOptions);
+                            
+                            const dayElement = document.createElement('div');
+                            dayElement.className = 'forecast-day';
+                            
+                            dayElement.innerHTML = `
+                                <div class="forecast-date">${formattedDate}</div>
+                                <div class="forecast-icon">
+                                    <i class="${getWeatherIconClass(day.weather_code)}"></i>
+                                </div>
+                                <div class="forecast-temp">
+                                    <span class="forecast-max">${day.max_temp}°</span>
+                                    <span class="forecast-min">${day.min_temp}°</span>
+                                </div>
+                                <div class="forecast-condition">${day.weather}</div>
+                                <div class="forecast-rain">
+                                    <i class="fas fa-tint"></i> ${day.precipitation_probability}%
+                                </div>
+                            `;
+                            
+                            forecastContainer.appendChild(dayElement);
+                        });
+                        
+                        // 隱藏載入狀態，顯示內容
+                        document.getElementById('weekly-weather-loading').style.display = 'none';
+                        document.getElementById('weekly-forecast-container').style.display = 'flex';
+                    })
+                    .catch(error => {
+                        console.error('獲取一周天氣預報失敗:', error);
+                        
+                        // 顯示錯誤信息
+                        const forecastContainer = document.getElementById('weekly-forecast-container');
+                        forecastContainer.innerHTML = '<div class="error-message"><i class="fas fa-exclamation-triangle"></i> 獲取天氣預報失敗</div>';
+                        
+                        document.getElementById('weekly-weather-loading').style.display = 'none';
+                        document.getElementById('weekly-forecast-container').style.display = 'flex';
+                    });
+            }
+            
+            // 根據天氣代碼獲取對應的圖標
+            function getWeatherIconClass(code) {
+                // 簡化版天氣圖標映射
+                if (code === 0) return 'fas fa-sun'; // 晴天
+                if (code === 1) return 'fas fa-sun'; // 晴時多雲
+                if (code === 2) return 'fas fa-cloud-sun'; // 多雲
+                if (code === 3) return 'fas fa-cloud'; // 陰天
+                if (code >= 45 && code <= 48) return 'fas fa-smog'; // 霧
+                if ((code >= 51 && code <= 57) || (code >= 61 && code <= 67)) return 'fas fa-cloud-rain'; // 雨
+                if (code >= 71 && code <= 77) return 'fas fa-snowflake'; // 雪
+                if (code >= 80 && code <= 82) return 'fas fa-cloud-showers-heavy'; // 陣雨
+                if (code >= 85 && code <= 86) return 'fas fa-snowflake'; // 雪
+                if (code >= 95) return 'fas fa-bolt'; // 雷雨
+                
+                return 'fas fa-cloud'; // 默認
+            }
+            
+            // 天氣切換按鈕事件處理
+            document.getElementById('current-weather-toggle').addEventListener('click', function() {
+                this.classList.add('active');
+                document.getElementById('weekly-weather-toggle').classList.remove('active');
+                document.getElementById('current-weather-section').style.display = 'block';
+                document.getElementById('weekly-weather-section').style.display = 'none';
+            });
+            
+            document.getElementById('weekly-weather-toggle').addEventListener('click', function() {
+                this.classList.add('active');
+                document.getElementById('current-weather-toggle').classList.remove('active');
+                document.getElementById('current-weather-section').style.display = 'none';
+                document.getElementById('weekly-weather-section').style.display = 'block';
+                fetchWeeklyWeather(); // 自動加載一周天氣預報
+            });
+            
+            // 天氣查詢按鈕
+            document.getElementById('get-weather').addEventListener('click', fetchWeather);
+            
+            // 一周天氣查詢按鈕
+            document.getElementById('get-weekly-weather').addEventListener('click', fetchWeeklyWeather);
+            
+            // 刷新天氣按鈕
+            document.getElementById('refresh-weather').addEventListener('click', fetchWeather);
+            
+            // 更新國家資訊
+            function updateCountryInfo() {
+                document.getElementById('info-country').textContent = selectedCountry;
+                
+                fetch(`/api/country_info?country=${selectedCountry}`)
+                    .then(response => response.json())
+                    .then(info => {
+                        document.getElementById('info-language').textContent = info.language || '未知';
+                        document.getElementById('info-timezone').textContent = info.timezone || '未知';
+                        document.getElementById('info-plug').textContent = info.plugType || '未知';
+                        document.getElementById('info-voltage').textContent = info.voltage || '未知';
+                        document.getElementById('info-emergency').textContent = info.emergencyNumber || '未知';
+                    })
+                    .catch(error => console.error('獲取國家資訊失敗:', error));
+            }
+            
+            // 初始化
+            initializeCitySelector();
+            updateCurrencyDisplay();
+            updateCountryInfo();
+        });
+    </script>
+</body>
+</html>
